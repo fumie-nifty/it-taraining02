@@ -1,0 +1,128 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.2'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.domaframework.doma.codegen' version '3.2.1'
+    id 'eclipse'
+}
+
+group = 'jp.co.flm'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // Doma
+    implementation 'org.seasar.doma:doma-core:3.5.0'
+    implementation 'org.seasar.doma.boot:doma-spring-boot-starter:3.0.0'
+    annotationProcessor 'org.seasar.doma:doma-processor:3.5.0'
+
+    // MySQL
+    runtimeOnly 'com.mysql:mysql-connector-j:8.4.0'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.platform:junit-platform-suite:1.10.2'
+
+    // Code generation dependencies
+    domaCodeGen 'com.mysql:mysql-connector-j:8.4.0'
+}
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-parameters"
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+import org.gradle.plugins.ide.eclipse.model.SourceFolder
+
+eclipse {
+    classpath {
+        file {
+            beforeMerged { cp ->
+                cp.entries.removeAll { it.kind == "src" }
+            }
+            whenMerged { cp ->
+                cp.entries.findAll { 
+                	it instanceof SourceFolder && it.path.startsWith("src/main") 
+                }*.output = "bin/main"
+                cp.entries.findAll { 
+                	it instanceof SourceFolder && it.path.startsWith("src/test") 
+                }*.output = "build/test-classes"
+                cp.entries.removeAll { it.kind == "output" }
+            }
+            withXml { provider ->
+                def node = provider.asNode()
+                node.appendNode('classpathentry', [
+                    kind: 'src',
+                    output: 'bin/main',
+                    path: '.apt_generated'
+                ])
+            }
+        }
+    }
+    jdt {
+        file {
+            withProperties { props ->
+                props.setProperty('org.eclipse.jdt.core.compiler.processAnnotations', 'enabled')
+                props.setProperty('org.eclipse.jdt.core.compiler.codegen.methodParameters', 'generate')
+            }
+        }
+    }
+}
+
+eclipseJdt {
+    doLast {
+        file('.factorypath').withWriter { writer ->
+            new groovy.xml.MarkupBuilder(writer).factorypath() {
+                configurations.annotationProcessor.files.each { f ->
+                    factorypathentry(kind: 'EXTJAR',
+			                        id: f.absolutePath,
+			                        enabled: true,
+			                        runInBatchMode: false)
+                }
+            }
+        }
+        mkdir('.apt_generated')
+    }
+}
+
+domaCodeGen {
+    def basePackage = "jp.co.flm.domain.domaCodeGen"
+
+    register("mysql") {
+        url = "jdbc:mysql://localhost:3306/springhandson"
+        user = "springmysql"
+        password = "springmysql"
+
+        entity {
+            packageName = "${basePackage}.entity"
+            useAccessor = true
+            useListener = true
+            showDbComment = true
+        }
+
+        dao {
+            packageName = "${basePackage}.dao"
+        }
+    }
+}
